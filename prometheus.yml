@@ -1,0 +1,14 @@
+# prometheus.yml
+global:
+  scrape_interval: 15s
+
+# Scrape config der indeholder et endpoint
+scrape_configs:
+  - job_name: 'articleservice'
+    static_configs:
+      # 'articleservice:80' er målet. 'articleservice' er hostname
+      - targets: ['articleservice:80']
+
+  - job_name: 'commentservice'
+    static_configs:
+      - targets: ['commentservice:80']

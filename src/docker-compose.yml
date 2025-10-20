@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  # Article Service Definition
+  articleservice:
+    build:
+      context: ./src/ArticleService
+    ports:
+      - "8001:80" # host port 8001, container bruger 80
+    environment:
+      - ASPNETCORE_URLS=http://+:80
+      - REDIS_CONNECTION_STRING=redis:6379
+    depends_on:
+      - redis
+
+  # Comment Service Definition
+  commentservice:
+    build:
+      context: ./src/CommentService
+    ports:
+      - "8002:80" # host port 8002
+    environment:
+      - ASPNETCORE_URLS=http://+:80
+      - REDIS_CONNECTION_STRING=redis:6379
+    depends_on:
+      - redis
+
+  # Redis Service Definition
+  redis:
+    image: "redis:latest"
+    ports:
+      - "6379:6379"
+    # command bruges så Redis configureres til at agere som LRU cache
+    # memory med max 256MB
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
