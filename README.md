@@ -2,6 +2,8 @@
 
 Jeg glemte at lave et github repository da jeg lavede opgaven... så der er desværre ikke nogen git historik.
 
+Jeg endte også med ikke at kunne få Grafana til at virke regelmæssigt... nogle gange virkede det og nogle gange ikke.
+
 Dette projekt er en løsning til den første obligatoriske opgave i "Development of large systems". Formålet er at implementere to caching-lag for at forbedre performance og tilgængelighed for en applikation, samt at bygge et live monitoring-dashboard til at overvåge cache-effektiviteten.
 
 Hele systemet er container-baseret og styres med Docker Compose.
