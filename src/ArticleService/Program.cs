@@ -40,21 +40,32 @@ app.MapGet("/articles/{id}", async (int id, IConnectionMultiplexer redis) =>
 {
     var db = redis.GetDatabase();
     var key = $"article:{id}";
-
     var cachedArticle = await db.StringGetAsync(key);
+    var containerId = Environment.MachineName;
 
     if (!cachedArticle.IsNullOrEmpty)
     {
         CachingMetrics.IncrementCacheHits("articles");
-        Console.WriteLine($"--> Cache HIT for article:{id}");
-        return Results.Ok(JsonSerializer.Deserialize<Article>(cachedArticle!));
+        Console.WriteLine($"--> Cache HIT for article:{id} on container {containerId}");
+                // Deserialize the original article
+        var article = JsonSerializer.Deserialize<Article>(cachedArticle!);
+        
+        // Create a NEW response object that includes the container ID
+        var response = new {
+            Article = article,
+            ServedBy = containerId // This is our proof!
+        };
+        return Results.Ok(response);
     }
     else
     {
         CachingMetrics.IncrementCacheMisses("articles");
-        Console.WriteLine($"--> Cache MISS for article:{id}");
-        return Results.NotFound("Article not found in cache.");
+        Console.WriteLine($"--> Cache MISS for article:{id} on container {containerId}");
+        
+        // Return a response that also includes which container handled the miss
+        return Results.NotFound(new { Message = "Article not found in cache.", ServedBy = containerId });
     }
+
 });
 
 app.MapControllers();
