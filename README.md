@@ -71,3 +71,47 @@ curl http://localhost:8001/articles/2
 ```
 
 Hold øje med Grafana-dashboardet (husk at sætte tidsintervallet til "Last 5 minutes"), hvor du vil se din cache hit ratio ændre sig live.
+
+---
+
+## Obligatorisk Opgave 2
+
+Denne sektion indeholder instruktioner til de demoer, der er forberedt til den anden obligatoriske opgave.
+
+### Demonstration til AKF Scale Cube
+
+Denne demo viser, hvordan `ArticleService` skaleres på X-aksen af AKF Scale Cube.
+
+#### **Arkitekturændringer**
+
+*   **ArticleService**: Er nu konfigureret til at køre som 3 identiske instanser. Servicens API-svar er blevet ændret til at inkludere containerens ID (`servedBy`), som bevis på, at anmodninger bliver håndteret af forskellige instanser.
+*   **Nginx Load Balancer**: En ny `loadbalancer` service er tilføjet, som lytter på port `8001`. Den fungerer som det primære indgangspunkt (entry point) og fordeler trafik på tværs af de tre `ArticleService` instanser.
+
+#### **Sådan kan man køre det**
+
+1.  Sørg for at alle containere er stoppet (`docker-compose down`).
+2.  Kør følgende kommando i projektets rodmappe. `--scale` flaget er essentielt, da det instruerer Docker Compose i at oprette 3 replikaer af `articleservice`.
+
+    ```bash
+    docker-compose up --build --scale articleservice=3
+    ```
+
+#### **Sådan verificeres scaling**
+
+1.  Åbn et nyt terminalvindue ved siden af allerede kørende docker terminal.
+2.  Send flere anmodninger til load balancerens endpoint på port `8001`.
+
+    ```bash
+    curl http://localhost:8001/articles/2
+    ```
+3.  Observer outputtet i din terminal. `servedBy`-feltet i JSON-svaret vil ændre værdi mellem anmodningerne. Dette bekræfter at load balancing virker.
+
+    **Eksempel på output:**
+    ```json
+    // Anmodning 1
+    {"article":{...},"servedBy":"ed6165072a5a"}
+
+    // Anmodning 2
+    {"article":{...},"servedBy":"3d7255f4c775"}
+    ```
+4.  Du kan også følge med i logfilerne fra `docker-compose` for at se "Cache HIT"-beskeder fra de forskellige service-instanser (f.eks. `articleservice-1`, `articleservice-2`).```
