@@ -1,0 +1,1 @@
+public record ProfanityCheckResult(bool isProfane, bool fallback);
