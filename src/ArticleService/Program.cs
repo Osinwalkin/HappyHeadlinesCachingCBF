@@ -1,8 +1,17 @@
 using Prometheus;
 using System.Text.Json;
 using StackExchange.Redis;
+using Serilog;
+using Serilog.Formatting.Json;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Configure Serilog
+builder.Host.UseSerilog((context, configuration) =>
+{
+    configuration.Enrich.FromLogContext()
+                 .WriteTo.Console(new JsonFormatter()); // Output logs as structured JSON
+});
 
 // Add services to the container.
 
@@ -23,6 +32,8 @@ builder.Services.AddHostedService<ArticleCacheWorker>();
 
 var app = builder.Build();
 
+app.UseSerilogRequestLogging();
+
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
@@ -36,36 +47,31 @@ app.UseAuthorization();
 
 // Lav test endpoint for at checke cache
 // Checker om worker putter data ind i Redis
-app.MapGet("/articles/{id}", async (int id, IConnectionMultiplexer redis) =>
+app.MapGet("/articles/{id}", async (int id, IConnectionMultiplexer redis, ILogger<Program> logger, HttpContext httpContext) =>
 {
-    var db = redis.GetDatabase();
-    var key = $"article:{id}";
-    var cachedArticle = await db.StringGetAsync(key);
-    var containerId = Environment.MachineName;
+    // NEW: Manually read the Trace ID from the incoming request header
+    var traceId = httpContext.Request.Headers["Trace-Id"].FirstOrDefault() ?? Guid.NewGuid().ToString();
 
-    if (!cachedArticle.IsNullOrEmpty)
+    // NEW: Add the TraceId to the logging context for all logs in this request
+    using (Serilog.Context.LogContext.PushProperty("TraceId", traceId))
     {
-        CachingMetrics.IncrementCacheHits("articles");
-        Console.WriteLine($"--> Cache HIT for article:{id} on container {containerId}");
-                // Deserialize the original article
-        var article = JsonSerializer.Deserialize<Article>(cachedArticle!);
-        
-        // Create a NEW response object that includes the container ID
-        var response = new {
-            Article = article,
-            ServedBy = containerId // This is our proof!
-        };
-        return Results.Ok(response);
-    }
-    else
-    {
-        CachingMetrics.IncrementCacheMisses("articles");
-        Console.WriteLine($"--> Cache MISS for article:{id} on container {containerId}");
-        
-        // Return a response that also includes which container handled the miss
-        return Results.NotFound(new { Message = "Article not found in cache.", ServedBy = containerId });
-    }
+        var db = redis.GetDatabase();
+        var key = $"article:{id}";
+        var cachedArticle = await db.StringGetAsync(key);
 
+        if (!cachedArticle.IsNullOrEmpty)
+        {
+            CachingMetrics.IncrementCacheHits("articles");
+            logger.LogInformation("Cache HIT for article {ArticleId}", id); // Using structured logging
+            return Results.Ok(JsonSerializer.Deserialize<Article>(cachedArticle!));
+        }
+        else
+        {
+            CachingMetrics.IncrementCacheMisses("articles");
+            logger.LogWarning("Cache MISS for article {ArticleId}", id); // Using structured logging
+            return Results.NotFound("Article not found in cache.");
+        }
+    }
 });
 
 app.MapControllers();
