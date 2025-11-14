@@ -78,7 +78,7 @@ Hold øje med Grafana-dashboardet (husk at sætte tidsintervallet til "Last 5 mi
 
 Denne sektion indeholder instruktioner til de demoer, der er forberedt til den anden obligatoriske opgave.
 
-### Demonstration til AKF Scale Cube
+### Demonstration til AKF Scale Cube Q2
 
 Denne demo viser, hvordan `ArticleService` skaleres på X-aksen af AKF Scale Cube.
 
@@ -118,7 +118,7 @@ Denne demo viser, hvordan `ArticleService` skaleres på X-aksen af AKF Scale Cub
 
 ---
 
-### Demonstration til Fault Isolation (Circuit Breaker)
+### Demonstration til Fault Isolation (Circuit Breaker) Q3
 
 Denne demo viser, hvordan jeg i `CommentService` implementerer fault isolation ved hjælp af et Circuit Breaker-mønster for at beskytte sig mod fejl i en afhængig service (en simuleret `ProfanityService`).
 
@@ -157,4 +157,72 @@ Denne demonstration observeres bedst ved at følge log-outputtet fra `commentser
     *   **Anmodning 4 (og efterfølgende):** Loggen vil nu vise, at kredsløbet er åbent, og at fallback-logikken bliver brugt. **Der bliver ikke længere forsøgt et netværkskald.**
         ```
         --> Circuit is open. ProfanityService is down. Using FALLBACK.
-        ```    Denne sekvens beviser, at Circuit Breaker-mønstret virker: det isolerer fejlen og lader systemet fortsætte med at fungere på en fornuftig måde.
+        ```
+        Denne sekvens beviser, at Circuit Breaker-mønstret virker: det isolerer fejlen og lader systemet fortsætte med at fungere på en fornuftig måde.
+
+---
+
+### Demonstration til logging og tracing Q4
+
+Denne demonstration vil prøve at vise principperne fra uge 38 og 39: struktureret logging og distribueret tracing. Den demonstrerer, hvordan et `TraceId` kan propagere fra en (simuleret) upstream service til `ArticleService`.
+
+#### **Arkitekturændringer**
+
+*   **ArticleService**: Er blevet opdateret med **Serilog** for at producere struktureret JSON-logging. Dette gør logs maskinlæsbare og lettere at analysere i et centralt log-system.
+*   **Trace Context Propagering**: `/articles/{id}` endpointet er blevet modificeret, så det nu inspicerer indkommende HTTP-kald for en header ved navn `Trace-Id`.
+*   **Log Enrichment**: Hvis en `Trace-Id` header findes, bliver dens værdi automatisk tilføjet til alle logs, der genereres under behandlingen af det pågældende kald. Hvis headeren mangler, genereres et nyt, unikt `TraceId`.
+
+#### **Sådan kan man køre det**
+
+1.  Sørg for at docker og docker compose er installeret.
+
+    ```bash
+    docker-compose up --build
+    ```
+
+#### **Sådan tester man det**
+
+Verifikationen sker ved at observere log-outputtet fra `articleservice` containerne i Docker, mens du sender to forskellige anmodninger.
+
+1.  **Test 1: Generering af en ny Trace ID**
+    Send en standard `curl`-anmodning uden en header.
+
+    ```bash
+    curl http://localhost:8001/articles/2
+    ```    
+    I Docker-loggen vil du se en struktureret JSON-logbesked. Læg mærke til `TraceId`-feltet, som nu indeholder et auto-genereret GUID.
+
+    **Eksempel på output i loggen:**
+    ```json
+    {
+        "Timestamp": "...",
+        "Level": "Information",
+        "MessageTemplate": "Cache HIT for article {ArticleId}",
+        "Properties": {
+            "ArticleId": 2,
+            "TraceId": "6f762b1a-230e-48d6-ab6b-e44f97ca7ae3"
+        }
+    }
+    ```
+
+2.  **Test 2: Propagering af en eksisterende Trace ID**
+    Send en ny `curl`-anmodning, men tilføj denne gang `Trace-Id` headeren for at simulere et kald fra en upstream service som `PublisherService`.
+
+    ```bash
+    curl -H "Trace-Id: fra-publisher-service-abcde" http://localhost:8001/articles/2
+    ```
+    I Docker-loggen vil du se en ny logbesked. Læg mærke til, at `TraceId`-feltet nu indeholder præcis den værdi, du sendte med i headeren.
+
+    **Eksempel på output i loggen:**
+    ```json
+    {
+        "Timestamp": "...",
+        "Level": "Information",
+        "MessageTemplate": "Cache HIT for article {ArticleId}",
+        "Properties": {
+            "ArticleId": 2,
+            "TraceId": "fra-publisher-service-abcde"
+        }
+    }
+    ```    
+    Dette bekræfter, at trace-konteksten er blevet succesfuldt propageret på tværs af servicegrænsen.

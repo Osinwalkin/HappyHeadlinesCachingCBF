@@ -1,20 +1,17 @@
-version: '3.8' # It's good practice to add the version
+version: '3.8'
 
 services:
-  # Article Service Definition - MODIFIED FOR SCALING
+  # Article Service Definition
   articleservice:
     build:
       context: ./src
       dockerfile: ArticleService/Dockerfile
-    # REMOVED: The 'ports' section. We don't want to access individual
-    #          instances directly. The load balancer will handle this now.
     environment:
       - ASPNETCORE_URLS=http://+:80
-    # NEW: This is the X-axis scaling command.
+    # This is the X-axis scaling command.
     deploy:
       replicas: 3
 
-  # Comment Service Definition (Unchanged)
   commentservice:
     build:
       context: ./src
@@ -24,14 +21,14 @@ services:
     environment:
       - ASPNETCORE_URLS=http://+:80
 
-  # Redis Service Definition (Unchanged)
+
   redis:
     image: "redis:latest"
     ports:
       - "6379:6379"
     command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
 
-  # Prometheus Service Definition (Unchanged)
+
   prometheus:
     image: prom/prometheus:latest
     ports:
@@ -44,7 +41,7 @@ services:
       - articleservice
       - commentservice
 
-  # Grafana Service Definition (Unchanged)
+
   grafana:
     image: grafana/grafana:latest
     ports:
@@ -52,14 +49,12 @@ services:
     depends_on:
       - prometheus
 
-  # NEW: The Nginx Load Balancer Service
+  # The Nginx Load Balancer Service
   loadbalancer:
     image: nginx:latest
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
     ports:
-      # We map host port 8001 to the load balancer's port 80.
-      # This is the new single entry point for the ArticleService.
       - "8001:80"
     depends_on:
       - articleservice

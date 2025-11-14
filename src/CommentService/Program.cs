@@ -20,19 +20,16 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
     return ConnectionMultiplexer.Connect(configuration);
 });
 
-// --- CORRECTED CIRCUIT BREAKER POLICY ---
+// CIRCUIT BREAKER POLICY
 
-// --- FINAL, SIMPLIFIED POLICY ---
-
-// 1. Define ONLY the circuit breaker policy.
 var circuitBreakerPolicy = HttpPolicyExtensions
-    .HandleTransientHttpError() // This handles network errors like 5xx, 408, or HttpRequestException.
+    .HandleTransientHttpError()
     .CircuitBreakerAsync(
         handledEventsAllowedBeforeBreaking: 3,
         durationOfBreak: TimeSpan.FromSeconds(60)
     );
 
-// 2. Register ONLY this policy with the HttpClient.
+
 builder.Services.AddHttpClient("ProfanityServiceClient", client =>
 {
     client.BaseAddress = new Uri("http://localhost:9999");
@@ -81,7 +78,7 @@ app.MapGet("/comments/article/{articleId}", async (int articleId, IConnectionMul
     return Results.Ok(commentsFromDb);
 });
 
-// --- NEW POST ENDPOINT TO DEMONSTRATE FAULT ISOLATION ---
+// ENDPOINT TO DEMONSTRATE FAULT ISOLATION
 app.MapPost("/comments", async (Comment comment, IHttpClientFactory clientFactory) =>
 {
     Console.WriteLine("\n--> Received new comment. Attempting to check for profanity...");
@@ -89,27 +86,22 @@ app.MapPost("/comments", async (Comment comment, IHttpClientFactory clientFactor
 
     try
     {
-        // This call is now protected ONLY by the circuit breaker.
         var response = await httpClient.PostAsJsonAsync("/check", comment);
         
-        // This code will only run if the call is successful.
         Console.WriteLine("--> Profanity check successful. Saving to database.");
         SaveComment(comment, needsModeration: false);
         return Results.Ok("Comment posted successfully.");
     }
     catch (Polly.CircuitBreaker.BrokenCircuitException)
     {
-        // This block executes ONLY when the circuit is open. This is our FALLBACK logic.
         Console.WriteLine("--> Circuit is open. ProfanityService is down. Using FALLBACK.");
         SaveComment(comment, needsModeration: true);
         return Results.Accepted("Comment accepted, will be moderated later.");
     }
     catch (HttpRequestException)
     {
-        // This block executes for the initial failures that the circuit breaker is counting.
         Console.WriteLine("--> ProfanityService is unreachable. Circuit breaker is counting this failure.");
         SaveComment(comment, needsModeration: true);
-        // We still accept the comment, but the log shows it's a transient failure.
         return Results.Accepted("Comment accepted due to a service error, will be moderated later.");
     }
 });
