@@ -96,7 +96,7 @@ Denne demo viser, hvordan `ArticleService` skaleres på X-aksen af AKF Scale Cub
     docker-compose up --build --scale articleservice=3
     ```
 
-#### **Sådan verificeres scaling**
+#### **Sådan testes scaling**
 
 1.  Åbn et nyt terminalvindue ved siden af allerede kørende docker terminal.
 2.  Send flere anmodninger til load balancerens endpoint på port `8001`.
@@ -115,3 +115,46 @@ Denne demo viser, hvordan `ArticleService` skaleres på X-aksen af AKF Scale Cub
     {"article":{...},"servedBy":"3d7255f4c775"}
     ```
 4.  Du kan også følge med i logfilerne fra `docker-compose` for at se "Cache HIT"-beskeder fra de forskellige service-instanser (f.eks. `articleservice-1`, `articleservice-2`).```
+
+---
+
+### Demonstration til Fault Isolation (Circuit Breaker)
+
+Denne demo viser, hvordan jeg i `CommentService` implementerer fault isolation ved hjælp af et Circuit Breaker-mønster for at beskytte sig mod fejl i en afhængig service (en simuleret `ProfanityService`).
+
+#### **Arkitekturændringer**
+
+*   **CommentService**: Er blevet opdateret med `Polly`-biblioteket for at implementere et Circuit Breaker.
+*   **Circuit Breaker Logik**: Kredsløbet er konfigureret til at "trippe" (åbne) efter 3 efterfølgende fejl, når der kaldes til `ProfanityService`.
+*   **Fallback Mekanisme**: Når kredsløbet er åbent, forsøger `CommentService` ikke længere at kalde den fejlende service. I stedet aktiveres en fallback-logik med det samme: kommentaren accepteres og markeres internt til senere moderation. Dette sikrer, at systemet forbliver funktionelt for brugeren, selvom en underliggende service er nede.
+*   **Nyt Endpoint**: Et nyt endpoint `POST /comments` er blevet tilføjet for at kunne demonstrere denne funktionalitet.
+
+#### **Sådan kan man køre det**
+
+1.  Man skal self bare have docker og docker compose installeret, og så køre man det sådan.
+
+    ```bash
+    docker-compose up --build
+    ```
+
+#### **Sådan tester man det**
+
+Denne demonstration observeres bedst ved at følge log-outputtet fra `commentservice-1` containeren i din Docker-terminal, mens du sender anmodninger fra en anden terminal.
+
+1.  Åbn en ny terminal.
+2.  Send den følgende `curl`-anmodning **mindst 4 gange i træk**.
+
+    ```bash
+    curl -X POST -H "Content-Type: application/json" -d '{"author":"Demo Bruger","text":"Dette er en test"}' http://localhost:8002/comments
+    ```
+3.  Observer logfilerne fra `commentservice-1` i din Docker-terminal. Du vil se følgende sekvens:
+
+    *   **Anmodning 1, 2 og 3:** Loggen vil vise en fejl, der bliver fanget. Dette er kredsløbet, der tæller fejlene.
+        ```
+        --> ProfanityService is unreachable. Circuit breaker is counting this failure.
+        ```
+
+    *   **Anmodning 4 (og efterfølgende):** Loggen vil nu vise, at kredsløbet er åbent, og at fallback-logikken bliver brugt. **Der bliver ikke længere forsøgt et netværkskald.**
+        ```
+        --> Circuit is open. ProfanityService is down. Using FALLBACK.
+        ```    Denne sekvens beviser, at Circuit Breaker-mønstret virker: det isolerer fejlen og lader systemet fortsætte med at fungere på en fornuftig måde.
